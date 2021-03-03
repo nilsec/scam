@@ -1,0 +1,8 @@
+numpy
+scipy
+torch
+tqdm
+pillow
+-e git+https://github.com/funkelab/funlib.learn.torch.git@master#egg=funlib.learn.torch
+-e git+https://github.com/funkelab/funlib.run.git@master#egg=funlib.run
+-e git+https://github.com/nilsec/pytorch-receptive-field.git@master#egg=torch-receptive-field
