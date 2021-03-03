@@ -1,1 +1,1 @@
-from .network_utils import init_network
+from .network_utils import init_network, run_inference

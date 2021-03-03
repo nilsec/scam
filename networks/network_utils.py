@@ -1,6 +1,9 @@
 import importlib
 import torch
+import torch.nn.functional as F
 from torch_receptive_field import receptive_field, receptive_field_for_unit
+
+from scam.utils import image_to_tensor
 
 def init_network(checkpoint_path=None, input_size=128, net_module="Vgg2D", input_nc=1, gpu_ids=[], eval_net=True, require_grad=False):
     """
