@@ -100,7 +100,6 @@ def get_mask(attribution, real_img, fake_img, real_class, fake_class, net_module
         copied_canvas_to = np.zeros(np.shape(copyfrom))
         copied_canvas_to+= np.array(mask_weight*copyto_ref)
         diff_copied = copied_canvas - copied_canvas_to
-
         
         fake_img_norm = normalize_image(copy.deepcopy(fake_img))
         out_fake = run_inference(net, fake_img_norm)
@@ -125,4 +124,4 @@ def get_mask(attribution, real_img, fake_img, real_class, fake_class, net_module
         for im, im_name in zip(imgs,img_names):
             save_image(im, os.path.join(out_dir, im_name + ".png"))
 
-    return imgs, mrf_score, thr
+    return imgs, mrf_score, thr, out_real, out_fake

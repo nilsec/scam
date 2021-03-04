@@ -23,5 +23,9 @@ if __name__ == "__main__":
     # Fixed for now:
     channels = 1
     scam = get_scammed(real_img, fake_img, args.realclass, args.fakeclass, args.net, args.checkpoint, input_shape, channels, args.layer)
-    imgs, mrf_score, thr = get_mask(scam, real_img, fake_img, args.realclass, args.fakeclass, args.net, args.checkpoint, input_shape, channels, args.out)
-    print(f"SCAMed: Mask explains {mrf_score[0]} of feature difference. See {args.out} for attribution.")
+    imgs, mrf_score, thr, out_real, out_fake = get_mask(scam, real_img, fake_img, args.realclass, args.fakeclass, args.net, args.checkpoint, input_shape, channels, args.out)
+
+    print(f"SCAMed: Mask explains {float(mrf_score)} of feature difference.")
+    print(f"{args.net}(real): {out_real.numpy()[0]}")
+    print(f"{args.net}(fake): {out_fake.numpy()[0]}")
+    print(f"See {args.out} for attribution.")
