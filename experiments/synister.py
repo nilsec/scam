@@ -8,7 +8,7 @@ from scam import get_scammed, get_mask
 
 def get_nth_sorted_image(idx, nt_A, nt_B, a_to_b, 
                          test_setup=0, flatten=True, 
-                         normalize=True):
+                         normalize=False):
     
     test_dir = get_test_dir(nt_A,
                             nt_B,
@@ -92,9 +92,10 @@ def sort_images(real_images,
 
 if __name__ == "__main__":
     vgg_checkpoint_path = "/nrs/funke/ecksteinn/synister_experiments/gan/02_train/setup_t0/model_checkpoint_499000"
-    net = init_network(vgg_checkpoint_path, eval_net=False, require_grad=True)
-    input_shape = (1,128,128)
-    real, fake = get_nth_sorted_image(2, "gaba", "glutamate", "A", 0)
-    scam = get_scammed(real, fake, 0, 2, net, input_shape, 24)
-    imgs, mrf_score, thr = get_mask(scam, real, fake, 0, 2, net)
+    #net = init_network(vgg_checkpoint_path, eval_net=True, require_grad=False)
+    input_shape = (128,128)
+    real, fake = get_nth_sorted_image(0, "gaba", "glutamate", "A", 0)
+    scam = get_scammed(real, fake, 0, 2, "Vgg2D", vgg_checkpoint_path, input_shape, 1,24)
+    real, fake = get_nth_sorted_image(0, "gaba", "glutamate", "A", 0, True, False)
+    imgs, mrf_score, thr = get_mask(scam, real, fake, 0, 2, "Vgg2D", vgg_checkpoint_path, input_shape, 1, out_dir="./test")
     print(mrf_score, thr)

@@ -28,3 +28,8 @@ def image_to_tensor(image):
     image_tensor = image_tensor.unsqueeze(0).unsqueeze(0)
     return image_tensor
 
+def save_image(array, image_path):
+    array = (array *0.5 + 0.5)*255
+    im = Image.fromarray(array)
+    im = im.convert('RGB')
+    im.save(image_path)
