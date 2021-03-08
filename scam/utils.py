@@ -33,3 +33,32 @@ def save_image(array, image_path):
     im = Image.fromarray(array)
     im = im.convert('RGB')
     im.save(image_path)
+
+def get_all_pairs(classes):
+    pairs = []
+    i = 0
+    for i in range(len(classes)):
+        for k in range(i+1, len(classes)):
+            pair = (classes[i], classes[k])
+            pairs.append(pair)
+
+    return pairs
+
+def get_image_pairs(experiment_name, class_0, class_1):
+    """
+    Experiment datasets are expected to be placed at 
+    experiments/<experiment_name>/data/<class_0>_<class_1>
+    These should be valid translations as produced by scam.create_dataset
+    """
+    base_dir = f"experiments/{experiment_name}/{class_0}_{class_1}"
+    images = os.listdir(image_dir)
+    real = [os.path.join(image_dir,im) for im in images if "real.png" in im]
+    fake = [os.path.join(image_dir,im) for im in images if "fake.png" in im]
+    paired_images = []
+    for r in real:
+        for f in fake:
+            if r.split("/")[-1].split("_")[-1] == f.split("/")[-1].split("_")[-1]:
+                paired_images.append((r,f))
+                break
+
+    return paired_images
