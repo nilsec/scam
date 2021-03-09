@@ -14,7 +14,7 @@ def hook_fn(in_grads, out_grads, m, i, o):
     except AttributeError: 
       pass
     
-def get_gradients_from_layer(net, x, y, layer_number, normalize=False):
+def get_gradients_from_layer(net, x, y, layer_name=None, normalize=False):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     xx = torch.tensor(x, device=device).unsqueeze(0)
     yy = torch.tensor([y], device=device)
@@ -23,7 +23,18 @@ def get_gradients_from_layer(net, x, y, layer_number, normalize=False):
     out_grads = []
     for param in net.features.parameters():
         param.requires_grad = True
-    net.features[layer_number].register_backward_hook(partial(hook_fn, in_grads, out_grads))
+
+    if layer_name is None:
+        layers = [(name,module) for name, module in net.named_modules() if type(module) == torch.nn.Conv2d][-1]
+        layer_name = layers[0]
+        layer = layers[1]
+    else:
+        layers = [module for name, module in net.named_modules() if name == layer_name]
+        assert(len(layers) == 1)
+        layer = layers[0]
+
+    layer.register_backward_hook(partial(hook_fn, in_grads, out_grads))
+
     out = net(xx)
     out[0][y].backward()
     grad = out_grads[0]

@@ -3,13 +3,14 @@ import numpy as np
 import os
 import cv2
 import copy
+import torch
 
 from scam.gradients import get_gradients_from_layer
 from scam.activations import get_activation_dict, get_layer_activations, project_layer_activations_to_input
 from scam.utils import normalize_image, save_image
 from networks import run_inference, init_network
 
-def get_scammed(real_img, fake_img, real_class, fake_class, net_module, checkpoint_path, input_shape, input_nc, layer_number, layer_prefix="features"):
+def get_scammed(real_img, fake_img, real_class, fake_class, net_module, checkpoint_path, input_shape, input_nc, layer_name=None):
     """
         real_img: Unnormalized (0-255) 2D image
 
@@ -25,9 +26,8 @@ def get_scammed(real_img, fake_img, real_class, fake_class, net_module, checkpoi
 
         input_nc: Number of input channels.
 
-        layer_number: Number of the last convolutional layer
+        layer_name: Name of the conv layer to use (defaults to last)
 
-        layer_prefix: Name of the layer
     """
 
 
@@ -36,11 +36,17 @@ def get_scammed(real_img, fake_img, real_class, fake_class, net_module, checkpoi
     
     imgs = [normalize_image(real_img), normalize_image(fake_img)]
     classes = [real_class, fake_class]
-    
+
+    if layer_name is None:
+        net = init_network(checkpoint_path, input_shape, net_module, input_nc, eval_net=True, require_grad=False)
+        last_conv_layer = [(name,module) for name, module in net.named_modules() if type(module) == torch.nn.Conv2d][-1]
+        layer_name = last_conv_layer[0]
+        layer = last_conv_layer[1]
+   
     grads = []
     for x,y in zip(imgs,classes):
         grad_net = init_network(checkpoint_path, input_shape, net_module, input_nc, eval_net=True, require_grad=False)
-        grads.append(get_gradients_from_layer(grad_net, x, y, layer_number))
+        grads.append(get_gradients_from_layer(grad_net, x, y, layer_name))
 
     acts_real = collections.defaultdict(list)
     acts_fake = collections.defaultdict(list)
@@ -56,11 +62,11 @@ def get_scammed(real_img, fake_img, real_class, fake_class, net_module, checkpoi
     
     layer_acts = []
     for act in acts:
-        layer_acts.append(get_layer_activations(act, layer_number, layer_prefix))
+        layer_acts.append(get_layer_activations(act, layer_name))
 
     net = init_network(checkpoint_path, input_shape, net_module, input_nc, eval_net=True, require_grad=False)
     delta = grads[1] * (layer_acts[0] - layer_acts[1])
-    delta_projected = project_layer_activations_to_input(net, (input_nc, input_shape[0], input_shape[1]), delta, layer_number)[0,:,:,:]
+    delta_projected = project_layer_activations_to_input(net, (input_nc, input_shape[0], input_shape[1]), delta, layer_name)[0,:,:,:]
     
     channels = np.shape(delta_projected)[0]
     scam = np.zeros(np.shape(delta_projected)[1:])
@@ -71,7 +77,8 @@ def get_scammed(real_img, fake_img, real_class, fake_class, net_module, checkpoi
     scam /= np.max(np.abs(scam))
     return scam
 
-def get_mask(attribution, real_img, fake_img, real_class, fake_class, net_module, checkpoint_path, input_shape, input_nc, out_dir=None):
+def get_mask(attribution, real_img, fake_img, real_class, fake_class, 
+             net_module, checkpoint_path, input_shape, input_nc, out_dir=None):
     """
     attribution: 2D array <= 1 indicating pixel importance
     """

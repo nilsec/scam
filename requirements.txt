@@ -3,6 +3,7 @@ scipy
 torch
 tqdm
 pillow
+captum
 opencv-python
 -e git+https://github.com/funkelab/funlib.learn.torch.git@master#egg=funlib.learn.torch
 -e git+https://github.com/funkelab/funlib.run.git@master#egg=funlib.run

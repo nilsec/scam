@@ -40,17 +40,14 @@ def get_activation_dict(net, images, activations):
     activations_dict = {name: torch.cat(outputs, 0).cpu().detach().numpy() for name, outputs in activations.items()}
     return activations_dict, out
 
-def get_layer_activations(activations_dict, layer_number, layer_prefix="features"):
-    layer = f"{layer_prefix}.{layer_number}"
+def get_layer_activations(activations_dict, layer_name):
     layer_activation = None
-    for layer_name, activation in activations_dict.items():
-        print(layer_name)
-        if layer_name == layer:
-            print("Activation shape in layer: ", np.shape(activation))
+    for name, activation in activations_dict.items():
+        if name == layer_name:
             layer_activation = activation
     return layer_activation
 
-def project_layer_activations_to_input(net, input_shape, layer_activation, layer_number):
+def project_layer_activations_to_input(net, input_shape, layer_activation, layer_name):
     """
     Projects the nth activation and the cth channel from layer 
     to input. layer_activation[n,c,:,:] -> Input
@@ -64,7 +61,7 @@ def project_layer_activations_to_input(net, input_shape, layer_activation, layer
     samples = [i for i in range(n)]
     channels = [c for c in range(c)]
     
-    units_to_rc = get_receptive_field_for_units(net, input_shape, layer_number, h, w)
+    units_to_rc = get_receptive_field_for_units(net, input_shape, layer_name, h, w)
     canvas = np.zeros([len(samples), len(channels), 128,128], 
                       dtype=np.float32)
     
