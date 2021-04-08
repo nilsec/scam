@@ -15,7 +15,6 @@ parser.add_argument("--fakeimg", help="Path to fake input image", required=True)
 parser.add_argument("--realclass", help="Real class index", required=True, type=int)
 parser.add_argument("--fakeclass", help="Fake class index", required=True, type=int)
 parser.add_argument("--out", help="Output directory", required=False, default="scam_out")
-parser.add_argument("--scam", help="Turn OFF scam attr", action="store_false")
 parser.add_argument("--ig", help="Turn OFF IG attr", action="store_false")
 parser.add_argument("--grads", help="Turn OFF grads attr", action="store_false")
 parser.add_argument("--gc", help="Turn OFF GC attr", action="store_false")
@@ -32,8 +31,6 @@ if __name__ == "__main__":
 
     methods = []
 
-    if args.scam:
-        methods.append("scam")
     if args.ig:
         methods.append("ig")
     if args.grads:
