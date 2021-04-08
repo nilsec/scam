@@ -5,7 +5,7 @@ import os
 
 from scam.utils import save_image, normalize_image, image_to_tensor
 from scam.activations import project_layer_activations_to_input
-from scam import get_scammed
+from scam import get_sgc
 from networks import init_network
 
 torch.manual_seed(123)
@@ -56,7 +56,7 @@ def get_attribution(real_img,
         attrs_names.append("gc_fake")
 
         # SCAM
-        gc_diff_0, gc_diff_1 = get_scammed(real_img, fake_img, real_class, 
+        gc_diff_0, gc_diff_1 = get_sgc(real_img, fake_img, real_class, 
                                      fake_class, net_module, checkpoint_path, 
                                      input_shape, channels, None)
         attrs.append(gc_diff_0)
