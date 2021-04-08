@@ -9,27 +9,25 @@ from networks import init_network
 torch.manual_seed(123)
 np.random.seed(123)
 
-def get_baselines(real_img, fake_img, real_class, fake_class, net_module, checkpoint_path, input_shape, channels, out_dir=None):
-    imgs = [image_to_tensor(normalize_image(real_img).astype(np.float32)), image_to_tensor(normalize_image(fake_img).astype(np.float32))]
+def get_baselines(real_img, fake_img, real_class, fake_class, net_module, checkpoint_path, input_shape, channels):
+    imgs = [image_to_tensor(normalize_image(real_img).astype(np.float32)), 
+            image_to_tensor(normalize_image(fake_img).astype(np.float32))]
+
     classes = [real_class, fake_class]
     net = init_network(checkpoint_path, input_shape, net_module, channels, eval_net=True, require_grad=False)
 
-    baseline = image_to_tensor(np.zeros(input_shape, dtype=np.float32))
-
+    
     # IG
+    baseline = image_to_tensor(np.zeros(input_shape, dtype=np.float32))
     net.zero_grad()
     ig = IntegratedGradients(net)
     ig_real, delta_real = ig.attribute(imgs[0], baseline, target=classes[0], return_convergence_delta=True)
     ig_fake, delta_fake = ig.attribute(imgs[1], baseline, target=classes[1], return_convergence_delta=True)
 
-    # IG SMOOTH
-    net.zero_grad()
-    ig = IntegratedGradients(net)
-    nt = NoiseTunnel(ig)
-    igs_real = nt.attribute(imgs[0], baselines=baseline, target=classes[0], nt_type='smoothgrad_sq', n_samples=100, stdevs=0.2)
-    igs_fake = nt.attribute(imgs[1], baselines=baseline, target=classes[1], nt_type='smoothgrad_sq', n_samples=100, stdevs=0.2)
+    # IG DIFF
+    ig_diff = ig_real - ig_fake
 
-    # SALIENCY
+    # GRAD
     net.zero_grad()
     saliency = Saliency(net)
     grads_real = saliency.attribute(imgs[0], 
@@ -37,22 +35,88 @@ def get_baselines(real_img, fake_img, real_class, fake_class, net_module, checkp
     grads_fake = saliency.attribute(imgs[1], 
                                     target=classes[1]) 
 
-    # GUIDED GRAD CAM
+    # GRAD DIFF
+    grads_diff = grads_real - grads_fake
+
+    # GC
+    net.zero_grad()
+    last_conv_layer = [(name,module) for name, module in net.named_modules() if type(module) == torch.nn.Conv2d][-1]
+    layer_name = last_conv_layer[0]
+    layer = last_conv_layer[1]
+    layer_gc = LayerGradCam(net, layer)
+    gc_real = layer_gc.attribute(imgs[0], target=classes[0])
+    gc_fake = layer_gc.attribute(imgs[1], target=classes[1])
+
+    # GC DIFF
+    gc_diff = gc_real - gc_fake
+    
+    # GGC
     net.zero_grad()
     last_conv = [module for module in net.modules() if type(module) == torch.nn.Conv2d][-1]
     guided_gc = GuidedGradCam(net, last_conv)
     ggc_real = guided_gc.attribute(imgs[0], target=classes[0])
     ggc_fake = guided_gc.attribute(imgs[1], target=classes[1])
 
-    attr = [ig_real.detach().numpy(), ig_fake.detach().numpy(), 
-            igs_real.detach().numpy(), igs_fake.detach().numpy(),
-            grads_real.detach().numpy(), grads_fake.detach().numpy(),
-            ggc_real.detach().numpy(), ggc_fake.detach().numpy()]
-    attr_names = ["ig_real", "ig_fake", "igsmooth_real", "igsmooth_fake", "grads_real", "grads_fake", "ggc_real", "ggc_fake"]
+    # GGC DIFF
+    ggc_diff = ggc_real - ggc_fake
 
-    if out_dir is not None:
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
+    # DL
+    net.zero_grad()
+    dl = DeepLift(net)
+    dl_real = dl.attribute(imgs[0], target=classes[0])
+    dl_fake = dl.attribute(imgs[1], target=classes[1])
 
-        for att, name in zip(attr, attr_names):
-            save_image(att[0,0,:,:], os.path.join(out_dir, name+".png"), renorm=False, norm=True)
+    # DL DIFF
+    dl_diff = dl_real - dl_fake
+
+    # INGRAD
+    net.zero_grad()
+    input_x_gradient = InputXGradient(net)
+    ingrad_real = input_x_gradient.attribute(imgs[0], target=classes[0])
+    ingrad_fake = input_x_gradient.attribute(imgs[1], target=classes[1])
+
+    # INGRAD DIFF
+    ingrad_diff = ingrad_real - ingrad_fake
+
+    attr = [ig_real, 
+            ig_fake,
+            ig_diff,
+            grads_real, 
+            grads_fake,
+            grads_diff,
+            gc_real,
+            gc_fake,
+            gc_diff,
+            ggc_real, 
+            ggc_fake,
+            ggc_diff,
+            dl_real,
+            dl_fake,
+            dl_diff,
+            ingrad_real,
+            ingrad_fake,
+            ingrad_diff]
+
+    attr_names = ["ig_real", 
+                  "ig_fake",
+                  "ig_diff",
+                  "grads_real", 
+                  "grads_fake",
+                  "grads_diff",
+                  "gc_real",
+                  "gc_fake",
+                  "gc_diff",
+                  "ggc_real", 
+                  "ggc_fake",
+                  "ggc_diff",
+                  "dl_real",
+                  "dl_fake",
+                  "dl_diff",
+                  "ingrad_real",
+                  "ingrad_fake",
+                  "ingrad_diff"]
+
+    attr = [a.detach().cpu().numpy() for a in attr]
+    attr_norm = [a[0,0,:,:]/np.max(np.abs(a[0,0,:,:])) for a in attr]
+
+    return attr_norm, attr_names
