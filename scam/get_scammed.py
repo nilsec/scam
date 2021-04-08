@@ -65,30 +65,38 @@ def get_scammed(real_img, fake_img, real_class, fake_class, net_module, checkpoi
         layer_acts.append(get_layer_activations(act, layer_name))
 
     net = init_network(checkpoint_path, input_shape, net_module, input_nc, eval_net=True, require_grad=False)
-    delta = grads[1] * (layer_acts[0] - layer_acts[1])
-    delta_projected = project_layer_activations_to_input(net, (input_nc, input_shape[0], input_shape[1]), delta, layer_name)[0,:,:,:]
+    delta_fake = grads[1] * (layer_acts[0] - layer_acts[1])
+    delta_real = grads[0] * (layer_acts[1] - layer_acts[0])
+    delta_fake_projected = project_layer_activations_to_input(net, (input_nc, input_shape[0], input_shape[1]), delta_fake, layer_name)[0,:,:,:]
+    delta_real_projected = project_layer_activations_to_input(net, (input_nc, input_shape[0], input_shape[1]), delta_real, layer_name)[0,:,:,:]
     
-    channels = np.shape(delta_projected)[0]
-    scam = np.zeros(np.shape(delta_projected)[1:])
+    channels = np.shape(delta_fake_projected)[0]
+    scam_0 = np.zeros(np.shape(delta_fake_projected)[1:])
+    scam_1 = np.zeros(np.shape(delta_real_projected)[1:])
 
     for c in range(channels):
-        scam += delta_projected[c,:,:]
+        scam_0 += delta_fake_projected[c,:,:]
+        scam_1 += delta_real_projected[c,:,:]
 
-    scam /= np.max(np.abs(scam))
-    return scam
+    scam_0 /= np.max(np.abs(scam_0))
+    scam_1 /= np.max(np.abs(scam_1))
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    return torch.tensor(scam_0, device=device), torch.tensor(scam_1, device=device)
 
 def get_mask(attribution, real_img, fake_img, real_class, fake_class, 
-             net_module, checkpoint_path, input_shape, input_nc, out_dir=None):
+             net_module, checkpoint_path, input_shape, input_nc):
     """
     attribution: 2D array <= 1 indicating pixel importance
     """
 
-
     net = init_network(checkpoint_path, input_shape, net_module, input_nc, eval_net=True, require_grad=False)
+    result_dict = {}
+    img_names = ["attr", "real", "fake", "hybrid", "mask_real", "mask_fake", "mask_residual"]
+    imgs_all = []
+    img_thresholds = [0, 0.2, 0.4, 0.6, 0.8, 0.99]
 
-    mrf_score = 0
-    thr = 0.9
-    while mrf_score<0.5 and thr>=0:
+    for k in range(0,100):
+        thr = k * 0.01
         copyfrom = copy.deepcopy(real_img)
         copyto = copy.deepcopy(fake_img)
         copyto_ref = copy.deepcopy(fake_img)
@@ -105,7 +113,7 @@ def get_mask(attribution, real_img, fake_img, real_class, fake_class,
 
         copied_canvas += np.array(mask_weight*copyfrom)
         copied_canvas_to = np.zeros(np.shape(copyfrom))
-        copied_canvas_to+= np.array(mask_weight*copyto_ref)
+        copied_canvas_to += np.array(mask_weight*copyto_ref)
         diff_copied = copied_canvas - copied_canvas_to
         
         fake_img_norm = normalize_image(copy.deepcopy(fake_img))
@@ -120,15 +128,10 @@ def get_mask(attribution, real_img, fake_img, real_class, fake_class,
         imgs = [attribution, real_img_norm, fake_img_norm, im_copied_norm, normalize_image(copied_canvas), 
                 normalize_image(copied_canvas_to), normalize_image(diff_copied)]
 
+        #if thr in img_thresholds:
+        imgs_all.append(imgs)
+
         mrf_score = out_copyto[0][real_class] - out_fake[0][real_class]     
-        
-        thr -= 0.01
+        result_dict[thr] = [float(mrf_score.detach().cpu().numpy()), mask_size]
 
-    if out_dir is not None:
-        img_names = ["attr","real", "fake", "hybrid", "mask_real", "mask_fake", "mask_residual"]
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
-        for im, im_name in zip(imgs,img_names):
-            save_image(im, os.path.join(out_dir, im_name + ".png"))
-
-    return imgs, mrf_score, thr, out_real, out_fake
+    return result_dict, img_names, imgs_all, img_thresholds
