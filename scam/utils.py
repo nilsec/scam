@@ -1,4 +1,5 @@
 import numpy as np
+import os
 from PIL import Image
 import torch
 
@@ -55,10 +56,10 @@ def get_image_pairs(experiment_name, class_0, class_1):
     experiments/<experiment_name>/data/<class_0>_<class_1>
     These should be valid translations as produced by scam.create_dataset
     """
-    base_dir = f"experiments/{experiment_name}/{class_0}_{class_1}"
+    image_dir = f"experiments/{experiment_name}/data/{class_0}_{class_1}"
     images = os.listdir(image_dir)
-    real = [os.path.join(image_dir,im) for im in images if "real.png" in im]
-    fake = [os.path.join(image_dir,im) for im in images if "fake.png" in im]
+    real = [os.path.join(image_dir,im) for im in images if "real" in im and im.endswith(".png")]
+    fake = [os.path.join(image_dir,im) for im in images if "fake" in im and im.endswith(".png")]
     paired_images = []
     for r in real:
         for f in fake:
