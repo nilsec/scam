@@ -34,7 +34,7 @@ def get_activation_dict(net, images, activations):
     # forward pass through the full dataset
     out = []
     for tensor_image in tensor_images:
-        out.append(net(tensor_image).detach().numpy())
+        out.append(net(tensor_image).detach().cpu().numpy())
         
     # concatenate all the outputs we saved to get the the activations for each layer for the whole dataset
     activations_dict = {name: torch.cat(outputs, 0).cpu().detach().numpy() for name, outputs in activations.items()}
