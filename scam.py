@@ -1,9 +1,8 @@
 import argparse
 import os
 
-from scam.utils import open_image
-from scam import get_scammed, get_mask
-from scam import get_baselines
+from scam.utils import open_image, save_image
+from scam import get_attribution, get_mask
 
 parser = argparse.ArgumentParser()
 
@@ -16,7 +15,14 @@ parser.add_argument("--fakeimg", help="Path to fake input image", required=True)
 parser.add_argument("--realclass", help="Real class index", required=True, type=int)
 parser.add_argument("--fakeclass", help="Fake class index", required=True, type=int)
 parser.add_argument("--out", help="Output directory", required=False, default="scam_out")
-parser.add_argument("--baselines", help="Calculate attribution baselines", action="store_true")
+parser.add_argument("--scam", help="Turn OFF scam attr", action="store_false")
+parser.add_argument("--ig", help="Turn OFF IG attr", action="store_false")
+parser.add_argument("--grads", help="Turn OFF grads attr", action="store_false")
+parser.add_argument("--gc", help="Turn OFF GC attr", action="store_false")
+parser.add_argument("--ggc", help="Turn OFF GGC attr", action="store_false")
+parser.add_argument("--dl", help="Turn OFF DL attr", action="store_false")
+parser.add_argument("--ingrad", help="Turn OFF ingrad attr", action="store_false")
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -24,22 +30,52 @@ if __name__ == "__main__":
     real_img = open_image(args.realimg, flatten=True, normalize=False)
     fake_img = open_image(args.fakeimg, flatten=True, normalize=False)
 
+    methods = []
+
+    if args.scam:
+        methods.append("scam")
+    if args.ig:
+        methods.append("ig")
+    if args.grads:
+        methods.append("grads")
+    if args.gc:
+        methods.append("gc")
+    if args.ggc:
+        methods.append("ggc")
+    if args.dl:
+        methods.append("dl")
+    if args.ingrad:
+        methods.append("ingrad")
+
+    mrf_scores = []
+    mask_sizes = []
+
     # Fixed for now:
     channels = 1
-    scam = get_scammed(real_img, fake_img, args.realclass, 
-                       args.fakeclass, args.net, args.checkpoint, 
-                       input_shape, channels, args.layer)
+    attrs, attrs_names = get_attribution(real_img, fake_img,
+                                         args.realclass, args.fakeclass,
+                                         args.net, args.checkpoint,
+                                         input_shape, channels, methods)
 
-    imgs, mrf_score, thr, out_real, out_fake = get_mask(scam, real_img, fake_img, 
-                                                        args.realclass, args.fakeclass, args.net, 
-                                                        args.checkpoint, input_shape, channels, args.out)
 
-    if args.baselines:
-        baseline_attributions = get_baselines(real_img, fake_img, args.realclass, 
-                                              args.fakeclass, args.net, args.checkpoint, 
-                                              input_shape, channels, os.path.join(args.out, "baselines"))
+    for attr, name in zip(attrs, attrs_names):
+        attr_imgs, attr_img_names, mrf_score, thr, mask_size, out_real, out_fake = get_mask(attr, real_img, fake_img, 
+                                                                                            args.realclass, args.fakeclass, 
+                                                                                            args.net, args.checkpoint, 
+                                                                                            input_shape, channels)
 
-    print(f"SCAMed: Mask explains {float(mrf_score)} of feature difference.")
-    print(f"{args.net}(real): {out_real.numpy()[0]}")
-    print(f"{args.net}(fake): {out_fake.numpy()[0]}")
-    print(f"See {args.out} for attribution.")
+        mrf_scores.append(mrf_score)
+        mask_sizes.append(mask_size)
+
+        base_dir = os.path.join(args.out, f"{name}")
+        if not os.path.exists(base_dir):
+            os.makedirs(base_dir)
+        for im, im_name in zip(attr_imgs, attr_img_names):
+            save_image(im, os.path.join(base_dir, im_name + ".png"))
+
+    for j in range(len(mrf_scores)):
+        print(attrs_names[j], 
+              mrf_scores[j].detach().cpu().numpy(), 
+              mask_sizes[j], 
+              mrf_scores[j].detach().cpu().numpy()/mask_sizes[j])
+                
