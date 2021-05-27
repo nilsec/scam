@@ -6,19 +6,28 @@ from scam.utils import normalize_image, save_image
 from networks import run_inference, init_network
 
 def get_mask(attribution, real_img, fake_img, real_class, fake_class, 
-             net_module, checkpoint_path, input_shape, input_nc):
+             net_module, checkpoint_path, input_shape, input_nc, output_classes,
+             downsample_factors=None):
     """
     attribution: 2D array <= 1 indicating pixel importance
     """
 
-    net = init_network(checkpoint_path, input_shape, net_module, input_nc, eval_net=True, require_grad=False)
+    net = init_network(checkpoint_path, input_shape, net_module, input_nc, eval_net=True, require_grad=False, output_classes=output_classes,
+                       downsample_factors=downsample_factors)
     result_dict = {}
     img_names = ["attr", "real", "fake", "hybrid", "mask_real", "mask_fake", "mask_residual"]
     imgs_all = []
     img_thresholds = [0, 0.2, 0.4, 0.6, 0.8, 0.99]
 
-    for k in range(0,100):
-        thr = k * 0.01
+
+    a_min = -1
+    a_max = 1
+    steps = 200
+    a_range = a_max - a_min
+    step = a_range/float(steps)
+    for k in range(0,steps+1):
+        thr = a_min + k * step
+        #thr = k * 0.01
         copyfrom = copy.deepcopy(real_img)
         copyto = copy.deepcopy(fake_img)
         copyto_ref = copy.deepcopy(fake_img)
