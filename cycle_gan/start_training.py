@@ -1,66 +1,69 @@
 import subprocess
+import itertools
 import json
 import os
 
 def start_training(train_setup,
-                   nt_combinations=None,
+                   data_roots,
                    netG="resnet_9blocks",
-                   base_data_dir="/nrs/funke/ecksteinn/synister_experiments/cycle_attribution/data_png",
+                   in_size=128,
                    continue_train=False):
 
-    checkpoint_base = "/nrs/funke/ecksteinn/synister_experiments/cycle_attribution/checkpoints"
+    for data_root in data_roots:
+        base_cmd = "~/singularity/run_lsf -q gpu_any python -u train.py" +\
+                   " --dataroot {} --name {} --input_nc 1 --output_nc 1 --netG {} --load_size {} --crop_size {} --checkpoints_dir {} --display_id 0"
 
-    nt_list = ["gaba", "acetylcholine", "glutamate", 
-               "serotonin", "octopamine", "dopamine"]
+        if continue_train:
+            base_cmd += " --continue_train"
 
-    base_cmd = "~/singularity/run_lsf -q gpu_any python -u train.py" +\
-               " --dataroot {} --name {} --input_nc 1 --output_nc 1 --netG {} --load_size 128 --crop_size 128 --checkpoints_dir /nrs/funke/ecksteinn/synister_experiments/cycle_attribution/checkpoints"
-
-    if continue_train:
-        base_cmd += " --continue_train"
-
-    if nt_combinations is None:
-        nt_combinations = []
-        for ntA in nt_list:
-            for ntB in nt_list:
-                if ntA != ntB:
-                    nt_combinations.append((ntA, ntB))
-
-    for nt_combination in nt_combinations:
-        ntA = nt_combination[0]
-        ntB = nt_combination[1]
-
-        nts = [ntA, ntB]
-        dataroot = os.path.join(base_data_dir, "synister_{}_{}".format(ntA, ntB))
-        if not os.path.exists(dataroot):
-            dataroot = os.path.join(base_data_dir, "synister_{}_{}".format(ntB, ntA))
-            nts = [ntB, ntA]
-        assert(os.path.exists(dataroot))
-        aux_class_a = nt_list.index(nts[0])
-        aux_class_b = nt_list.index(nts[1])
-        train_setup_name = "train_{}_{}_s{}".format(nts[0], 
-                                                    nts[1], 
-                                                    train_setup)
-
-        checkpoint_dir = os.path.join(checkpoint_base, 
+        train_setup_name = "train_s{}".format(train_setup)
+        checkpoint_dir = os.path.join(os.path.join(data_root, "setups"), 
                                       train_setup_name)
 
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
 
-        json.dump({"aux_class_A": aux_class_a,
-                   "aux_class_B": aux_class_b,
-                   "dataroot": dataroot,
-                   "train_setup": train_setup,
-                   "netG": netG},
-                    open(os.path.join(checkpoint_dir, "train_config.json"), "w+"))
-
-        cmd = base_cmd.format(dataroot,
+        cmd = base_cmd.format(data_root,
                               train_setup_name,
-                              netG
-                              )
+                              netG,
+                              in_size,
+                              in_size,
+                              checkpoint_dir)
         subprocess.Popen(cmd, 
                          shell=True) 
 
+
+def train_fade():
+    datasets = {"1a": ["0_1", "0_2", "1_2"],
+                "1b": ["0_1", "0_2", "1_2"],
+                "1c": ["0_1", "0_2", "1_2"],
+                "1d": ["0_1"],
+                "2a": ["0_1"],
+                "2b_s": ["0_1"],
+                "2c_s": ["0_1"],
+                "2d_s": ["0_1"]}
+
+    data_roots = []
+    for d, k in datasets.items():
+        for j in k:
+            data_roots.append(f"/nrs/funke/ecksteinn/soma_data/{d}/cycle_gan/{j}")
+
+    start_training(train_setup=0, 
+                   data_roots=data_roots)
+
+def train_mnist():
+    datasets = [f"{i}_{j}" for i,j in list(itertools.combinations([i for i in range(10)], 2))]
+    data_roots = []
+
+    for d in datasets:
+        data_roots.append(f"/nrs/funke/ecksteinn/mnist_png/training/cycle_gan/{d}")
+
+    print(data_roots)
+
+    start_training(train_setup=0, 
+                   data_roots=data_roots,
+                   in_size=28)
+
+
 if __name__ == "__main__":
-    start_training(train_setup=1112, nt_combinations=[("gaba", "acetylcholine")])
+    train_mnist()
