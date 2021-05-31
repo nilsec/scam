@@ -51,7 +51,9 @@ class TestModel(BaseModel):
         self.netAUX = networks.define_AUX(checkpoint_path=opt.aux_checkpoint,
                                           input_size=opt.aux_input_size,
                                           aux_net=opt.aux_net,
-                                          input_nc=opt.aux_input_nc)
+                                          input_nc=opt.aux_input_nc,
+                                          output_classes=opt.aux_output_classes,
+                                          downsample_factors=opt.aux_downsample_factors)
 
 
          # assigns the model to self.netG_[suffix] so that it can be loaded
