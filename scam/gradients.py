@@ -21,8 +21,12 @@ def get_gradients_from_layer(net, x, y, layer_name=None, normalize=False):
     xx = xx.unsqueeze(0)
     in_grads = []
     out_grads = []
-    for param in net.features.parameters():
-        param.requires_grad = True
+    try:
+        for param in net.features.parameters():
+            param.requires_grad = True
+    except AttributeError:
+        for param in net.parameters():
+            param.requires_grad = True
 
     if layer_name is None:
         layers = [(name,module) for name, module in net.named_modules() if type(module) == torch.nn.Conv2d][-1]
