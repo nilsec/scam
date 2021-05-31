@@ -1,5 +1,13 @@
 from .base_options import BaseOptions
 
+def downsample_type(s):
+    try:
+        factors = [tuple([int(x) for x in l.split(',')]) for l in s.split('x')]
+    except:
+        raise ValueError("Downsample input not understood")
+
+    return factors
+
 
 class TestOptions(BaseOptions):
     """This class includes test options.
@@ -20,7 +28,9 @@ class TestOptions(BaseOptions):
         parser.add_argument('--aux_input_size', type=int, default=128, help='AUX net input size')
         parser.add_argument('--aux_net', type=str, default='vgg2d', help='AUX net architecture')
         parser.add_argument('--aux_input_nc', type=int, default=1, help='AUX net input channels')
-
+        parser.add_argument('--aux_output_classes', type=int, default=6, help='AUX number of output classes')
+        parser.add_argument('--aux_downsample_factors', type=downsample_type, default=[(2,2), (2,2), (2,2), (2,2)], 
+                            help='AUX Downsample factors for VGG')
 
         # rewrite devalue values
         parser.set_defaults(model='test')
