@@ -21,6 +21,7 @@ parser.add_argument("--gc", help="Turn OFF GC attr", action="store_false")
 parser.add_argument("--ggc", help="Turn OFF GGC attr", action="store_false")
 parser.add_argument("--dl", help="Turn OFF DL attr", action="store_false")
 parser.add_argument("--ingrad", help="Turn OFF ingrad attr", action="store_false")
+parser.add_argument("--random", help="Turn OFF random attr", action="store_false")
 
 
 if __name__ == "__main__":
@@ -43,6 +44,8 @@ if __name__ == "__main__":
         methods.append("dl")
     if args.ingrad:
         methods.append("ingrad")
+    if args.random:
+        methods.append("random")
 
     mrf_scores = []
     mask_sizes = []
@@ -56,23 +59,21 @@ if __name__ == "__main__":
 
 
     for attr, name in zip(attrs, attrs_names):
-        attr_imgs, attr_img_names, mrf_score, thr, mask_size, out_real, out_fake = get_mask(attr, real_img, fake_img, 
-                                                                                            args.realclass, args.fakeclass, 
-                                                                                            args.net, args.checkpoint, 
-                                                                                            input_shape, channels)
+        result_dict, img_names, imgs_all, img_thresholds = get_mask(attr, real_img, fake_img, 
+                                                                    args.realclass, args.fakeclass, 
+                                                                    args.net, args.checkpoint, 
+                                                                    input_shape, channels)
 
-        mrf_scores.append(mrf_score)
-        mask_sizes.append(mask_size)
+        method_dir = os.path.join(args.out, f"{name}")
+        if not os.path.exists(method_dir):
+            os.makedirs(method_dir)
 
-        base_dir = os.path.join(args.out, f"{name}")
-        if not os.path.exists(base_dir):
-            os.makedirs(base_dir)
-        for im, im_name in zip(attr_imgs, attr_img_names):
-            save_image(im, os.path.join(base_dir, im_name + ".png"))
+        for mask_imgs, thr in zip(imgs_all, img_thresholds):
+            threshold_dir = os.path.join(method_dir, f"t_{thr}")
+            if not os.path.exists(threshold_dir):
+                os.makedirs(threshold_dir)
+            for mask_im, mask_name in zip(mask_imgs, img_names):
+                save_image(mask_im, os.path.join(threshold_dir, mask_name + ".png"))
 
-    for j in range(len(mrf_scores)):
-        print(attrs_names[j], 
-              mrf_scores[j].detach().cpu().numpy(), 
-              mask_sizes[j], 
-              mrf_scores[j].detach().cpu().numpy()/mask_sizes[j])
-                
+        with open(os.path.join(method_dir, "results.txt"), 'w+') as f:
+            print(result_dict, file=f)
