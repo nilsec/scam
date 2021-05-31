@@ -1,133 +1,190 @@
 import os
 import subprocess
+import itertools
 from shutil import copyfile
 
-def start_testing(nt_combinations,
-                  test_nt,
-                  dataroot,
+def start_testing(class_pair,
+                  test_class,
+                  checkpoints_dir,
+                  data_root,
                   results_dir,
+                  aux_checkpoint,
+                  aux_output_classes,
+                  aux_downsample_factors=[(2,2),(2,2),(2,2),(2,2)],
+                  aux_net="vgg2d",
+                  input_size=128,
                   netG="resnet_9blocks",
-                  aux_checkpoint="/nrs/funke/ecksteinn/synister_experiments/gan/02_train/setup_t0/model_checkpoint_499000",
-                  num_test=500,
-                  train_setup=2):
+                  num_test=500):
 
-    base_cmd = "~/singularity/run_lsf python -u test.py --model test --no_dropout --results_dir {} --dataroot {} --checkpoints_dir {} --name {} --model_suffix {} --num_test {} --aux_checkpoint {} --aux_input_size 128 --aux_net vgg2d --aux_input_nc 1 --num_threads 1 --verbose"
-    base_dir = "/nrs/funke/ecksteinn/synister_experiments/cycle_attribution"
+    # Workaround for cycle_gan convention
+    name = os.path.basename(checkpoints_dir)
+    checkpoints_dir = os.path.dirname(checkpoints_dir)
 
-    if test_nt == nt_combinations[0]:
+    base_cmd = "~/singularity/run_lsf -q gpu_any python -u cycle_gan/test.py --model test --no_dropout --results_dir {} --dataroot {} --checkpoints_dir {} --name {} --model_suffix {} --num_test {} --aux_checkpoint {} --aux_input_size {} --aux_net {} --aux_input_nc 1 --num_threads 1 --verbose --aux_output_classes {} --aux_downsample_factors '{}'"
+
+    if test_class == class_pair[0]:
         a_or_b = "A"
-    elif test_nt == nt_combinations[1]:
+    elif test_class == class_pair[1]:
         a_or_b = "B"
 
-    nt_list = ["gaba", "acetylcholine", "glutamate",
-               "serotonin", "octopamine", "dopamine"]
+    data_root = os.path.join(data_root, "train" + a_or_b)
 
-    train_setup_name = "train_{}_{}_s{}".format(nt_combinations[0],
-                                                nt_combinations[1],
-                                                train_setup)
-    checkpoint_dir = base_dir + "/checkpoints"
-    
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
 
+
+    aux_downsample_factors_string = ""
+    for fac in aux_downsample_factors:
+        for dim in fac:
+            aux_downsample_factors_string+=f"{dim},"
+        aux_downsample_factors_string=aux_downsample_factors_string[:-1] + "x"
+    aux_downsample_factors_string = aux_downsample_factors_string[:-1]
+
     cmd = base_cmd.format(results_dir,
-                          dataroot,
-                          checkpoint_dir,
-                          train_setup_name,
+                          data_root,
+                          checkpoints_dir,
+                          name,
                           "_" + a_or_b,
                           num_test,
-                          aux_checkpoint)
+                          aux_checkpoint,
+                          input_size,
+                          aux_net,
+                          aux_output_classes,
+                          aux_downsample_factors_string)
 
     subprocess.Popen(cmd,
                      shell=True)
-    #subprocess.check_call(cmd,shell=True)
-    #print(cmd)
-def get_combinations(train_setup=2):
-    base_dir = "/nrs/funke/ecksteinn/synister_experiments/cycle_attribution/checkpoints"
-    nt_list = ["gaba", "acetylcholine", "glutamate",
-               "serotonin", "octopamine", "dopamine"]
 
-    nt_combinations = []
-    for ntA in nt_list:
-        for ntB in nt_list:
-            if ntA != ntB:
-                checkpoint_dir = base_dir + "/train_{}_{}_s{}".format(ntA, ntB, train_setup)
-                if os.path.exists(checkpoint_dir + "/web"):
-                    nt_combinations.append((ntA, ntB))
+def test_all_fade():
+    level_to_classes = {"1a": [0,1,2],
+			"1b": [0,1,2],
+			"1c": [0,1,2],
+			"1d": [0,1],
+			"2a": [0,1],
+			"2b_s": [0,1],
+			"2c_s": [0,1],
+			"2d_s": [0,1]}
 
-    return nt_combinations
+    vgg_winner = {"1a": 14,
+                  "1b": 72,
+                    "1c": 63,
+                    "1d": 83,
+                    "2a": 7,
+                    "2b_s": 58,
+                    "2c_s": 87,
+                    "2d_s": 81}
 
+    res_winner = {"1a": 37,
+                  "1b": 87,
+                    "1c": 30,
+                    "1d": None, # 58%
+                    "2a": 24,
+                    "2b_s": None, # 62%
+                    "2c_s": None, # 61% 
+                    "2d_s": None} # 58%
 
-def create_results_data_dir(result_image_dir, base_data_dir, cycle):
-    fake_images = [os.path.join(result_image_dir,f) for f in os.listdir(result_image_dir) if f.endswith("fake.png")]
-    cycle_dir = result_image_dir + "/cycle_{}".format(cycle)
-    os.makedirs(cycle_dir)
-    for im in fake_images:
-        copyfile(im, cycle_dir + "/" + os.path.basename(im))
+    nets = {"vgg": vgg_winner, "res": res_winner}
 
-    return cycle_dir 
+    for net in nets:
+        for level, classes in level_to_classes.items():
+            class_pairs = [[i,j] for i,j in list(itertools.combinations(classes, 2))]
+            for class_pair in class_pairs:
+                dataset = f"{class_pair[0]}_{class_pair[1]}"
+                data_root = f"/nrs/funke/ecksteinn/soma_data/{level}/cycle_gan/{dataset}"
+                checkpoints_dir = os.path.join(data_root, "setups/train_s0/train_s0")
 
+                epoch = nets[net][level]
+                if epoch is None:
+                    continue
+                aux_checkpoint = f"/groups/funke/home/ecksteinn/Projects/scam/experiments/fade/classifiers/{level}_{net}/epoch_{epoch}"
+                aux_output_classes = len(classes)
+                aux_downsample_factors = [(2,2),(2,2),(2,2),(2,2)]
 
-def start_testing_cycles(nt_combinations,
-                         test_nt,
-                         n_cycles,
-                         dataroot,
-                         results_dir,
-                         train_setup):
+                aux_net = net
+                if net == "vgg":
+                    aux_net = "vgg2d"
 
-    for cycle in range(n_cycles):
-        start_testing(nt_combinations=nt_combinations,
-                      test_nt=test_nt,
-                      dataroot=dataroot,
-                      results_dir=results_dir)
+                for test_class in class_pair:
+                    print(net, level, class_pair, test_class)
+                    results_dir = os.path.join(data_root, f"results/{net}_{test_class}")
 
-        image_dir = results_dir + "/train_{}_{}_s{}/test_latest/images".format(nt_combinations[0], nt_combinations[1], train_setup)
+                    start_testing(class_pair,
+                                  test_class,
+                                  checkpoints_dir,
+                                  data_root,
+                                  results_dir,
+                                  aux_checkpoint,
+                                  aux_output_classes,
+                                  aux_downsample_factors=aux_downsample_factors,
+                                  aux_net=aux_net,
+                                  input_size=128,
+                                  netG="resnet_9blocks",
+                                  num_test=1000)
+                                     
+def test_all_mnist():
+    vgg_winner = 92
+    res_winner = 71 
 
-        dataroot = create_results_data_dir(image_dir, 
-                                           image_dir, cycle)
-        results_dir = dataroot + "/results"
+    nets = {"vgg": vgg_winner, "res": res_winner}
+    classes = [k for k in range(10)]
 
-def test_all_cycles(test_setup, n_cycles=5, train_setup=2):
-    combinations = get_combinations()
-    for comb in combinations:
-        for nt in comb:
-            base_dir = "/nrs/funke/ecksteinn/synister_experiments/cycle_attribution"
-            direction = ["A","B"][comb.index(nt)]
-            dataroot = base_dir + "/data_png/synister_{}_{}/train{}".format(comb[0],
-                                                                            comb[1],
-                                                                            direction)
+    for net in nets:
+        class_pairs = [[i,j] for i,j in list(itertools.combinations(classes, 2))]
+        for class_pair in class_pairs:
+            dataset = f"{class_pair[0]}_{class_pair[1]}"
+            data_root = f"/nrs/funke/ecksteinn/mnist_png/training/cycle_gan/{dataset}"
+            checkpoints_dir = os.path.join(data_root, "setups/train_s0/train_s0")
+            epoch = nets[net]
+            aux_checkpoint = f"/groups/funke/home/ecksteinn/Projects/scam/experiments/mnist/classifiers/{net}/epoch_{epoch}"
+            aux_output_classes = len(classes)
 
-            results_dir = "/nrs/funke/ecksteinn/synister_experiments/cycle_attribution/results/test_{}_{}_{}_c{}".format(comb[0], 
-                                                                                                                         comb[1], 
-                                                                                                                         direction,
-                                                                                                                         test_setup)
+            aux_downsample_factors = [(2,2),(2,2),(1,1),(1,1)]
 
-            start_testing_cycles(nt_combinations=comb,
-                                 test_nt=nt,
-                                 n_cycles=n_cycles,
-                                 dataroot=dataroot,
-                                 results_dir=results_dir,
-                                 train_setup=train_setup)
-def test_all(train_setup, test_setup):
-    combinations = get_combinations()
-    for comb in combinations:
-        for nt in comb:
-            base_dir = "/nrs/funke/ecksteinn/synister_experiments/cycle_attribution"
-            direction = ["A","B"][comb.index(nt)]
-            dataroot = base_dir + "/data_png/synister_{}_{}/train{}".format(comb[0],
-                                                                            comb[1],
-                                                                            direction)
+            aux_net = net
+            if net == "vgg":
+                aux_net = "vgg2d"
 
-            results_dir = "/nrs/funke/ecksteinn/synister_experiments/" +\
-                    "cycle_attribution/results/test_{}_{}_{}_t{}".format(comb[0], 
-                                                                         comb[1], 
-                                                                         direction,
-                                                                         test_setup)
-            start_testing(comb,
-                          nt,
-                          dataroot,
-                          results_dir,
-                          train_setup=train_setup)
+            for test_class in class_pair:
+                print(net, class_pair, test_class)
+                results_dir = os.path.join(data_root, f"results/{net}_{test_class}")
 
+                start_testing(class_pair,
+                              test_class,
+                              checkpoints_dir,
+                              data_root,
+                              results_dir,
+                              aux_checkpoint,
+                              aux_output_classes,
+                              aux_downsample_factors=aux_downsample_factors,
+                              aux_net=aux_net,
+                              input_size=28,
+                              netG="resnet_9blocks",
+                              num_test=1000)
+                                 
 if __name__ == "__main__":
-    test_all(2, 0)
+    test_all_mnist()
+
+    """
+    class_pair = [0,1]
+    test_class = 0
+    checkpoints_dir = "/nrs/funke/ecksteinn/soma_data/1a/cycle_gan/0_1/setups/train_s0/train_s0"
+    data_root = "/nrs/funke/ecksteinn/soma_data/1a/cycle_gan/0_1"
+    results_dir = "/nrs/funke/ecksteinn/soma_data/1a/cycle_gan/0_1/results"
+    aux_checkpoint = "/groups/funke/home/ecksteinn/Projects/scam/experiments/fade/classifiers/1a_vgg/epoch_99"
+    aux_output_classes = 3
+    aux_downsample_factors = [(2,2),(2,2),(2,2),(2,2)]
+
+    start_testing(class_pair,
+                  test_class,
+                  checkpoints_dir,
+                  data_root,
+                  results_dir,
+                  aux_checkpoint,
+                  aux_output_classes,
+                  aux_downsample_factors=aux_downsample_factors,
+                  aux_net="vgg2d",
+                  input_size=128,
+                  netG="resnet_9blocks",
+                  num_test=10)
+    """
+
