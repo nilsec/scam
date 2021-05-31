@@ -86,8 +86,6 @@ class Vgg2D(torch.nn.Module):
             shape[2],
             shape[3])
     
-        #raw_with_channels = self.crop(raw_with_channels, shape)
-        
         raw_with_channels = raw
         f = self.features(raw_with_channels)
         f = f.view(f.size(0), -1)
