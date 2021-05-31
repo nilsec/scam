@@ -2,10 +2,13 @@ from captum.attr import IntegratedGradients, Saliency, DeepLift, NoiseTunnel, Gu
 import torch
 import numpy as np
 import os
+import scipy
+import scipy.ndimage
+import sys
 
 from scam.utils import save_image, normalize_image, image_to_tensor
-from scam.activations import project_layer_activations_to_input
-from scam import get_sgc
+from scam.activations import project_layer_activations_to_input, project_layer_activations_to_input_rescale
+from scam.stereo_gc import get_sgc
 from networks import init_network
 
 torch.manual_seed(123)
@@ -19,17 +22,34 @@ def get_attribution(real_img,
                     checkpoint_path, 
                     input_shape, 
                     channels,
-                    methods=["ig", "grads", "gc", "ggc", "dl", "ingrad"]):
+                    methods=["ig", "grads", "gc", "ggc", "dl", "ingrad", "random", "residual"],
+                    output_classes=6,
+                    downsample_factors=[(2,2), (2,2), (2,2), (2,2)]):
 
 
     imgs = [image_to_tensor(normalize_image(real_img).astype(np.float32)), 
             image_to_tensor(normalize_image(fake_img).astype(np.float32))]
 
     classes = [real_class, fake_class]
-    net = init_network(checkpoint_path, input_shape, net_module, channels, eval_net=True, require_grad=False)
+    net = init_network(checkpoint_path, input_shape, net_module, channels, output_classes=output_classes,eval_net=True, require_grad=False,
+                       downsample_factors=downsample_factors)
 
     attrs = []
     attrs_names = []
+
+    if "residual" in methods:
+        res = np.abs(real_img - fake_img)
+        res = res - np.min(res)
+        attrs.append(torch.tensor(res/np.max(res)))
+        attrs_names.append("residual")
+
+    if "random" in methods:
+        rand = np.abs(np.random.randn(*np.shape(real_img)))
+        rand = np.abs(scipy.ndimage.filters.gaussian_filter(rand, 4))
+        rand = rand - np.min(rand)
+        rand = rand/np.max(np.abs(rand))
+        attrs.append(torch.tensor(rand))
+        attrs_names.append("random")
 
     if "gc" in methods:
         net.zero_grad()
@@ -40,14 +60,8 @@ def get_attribution(real_img,
         gc_real = layer_gc.attribute(imgs[0], target=classes[0])
         gc_fake = layer_gc.attribute(imgs[1], target=classes[1])
 
-
-        # PROJECT
-        last_conv_layer = [(name,module) for name, module in net.named_modules() if type(module) == torch.nn.Conv2d][-1]
-        layer_name = last_conv_layer[0]
-        layer = last_conv_layer[1]
-
-        gc_real = project_layer_activations_to_input(net, (1, input_shape[0], input_shape[1]), gc_real.cpu().detach().numpy(), layer_name)
-        gc_fake = project_layer_activations_to_input(net, (1, input_shape[0], input_shape[1]), gc_fake.cpu().detach().numpy(), layer_name)
+        gc_real = project_layer_activations_to_input_rescale(gc_real.cpu().detach().numpy(), (input_shape[0], input_shape[1]))
+        gc_fake = project_layer_activations_to_input_rescale(gc_fake.cpu().detach().numpy(), (input_shape[0], input_shape[1]))
 
         attrs.append(torch.tensor(gc_real[0,0,:,:]))
         attrs_names.append("gc_real")
@@ -58,7 +72,8 @@ def get_attribution(real_img,
         # SCAM
         gc_diff_0, gc_diff_1 = get_sgc(real_img, fake_img, real_class, 
                                      fake_class, net_module, checkpoint_path, 
-                                     input_shape, channels, None)
+                                     input_shape, channels, None, output_classes=output_classes,
+                                     downsample_factors=downsample_factors)
         attrs.append(gc_diff_0)
         attrs_names.append("gc_diff_0")
 
