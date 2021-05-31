@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from functools import partial
+import cv2
 
 from scam.utils import image_to_tensor
 from scam.receptive_fields import get_receptive_field_for_units
@@ -75,4 +76,28 @@ def project_layer_activations_to_input(net, input_shape, layer_activation, layer
                     y_range = np.array(rc[1], dtype=int)
                     canvas[n, c, x_range[0]:x_range[1], y_range[0]: y_range[1]] += to_project[x,y]
             
+    return canvas
+
+def project_layer_activations_to_input_rescale(layer_activation, input_shape):
+    """
+    Projects the nth activation and the cth channel from layer 
+    to input. layer_activation[n,c,:,:] -> Input
+    """
+    act_shape = np.shape(layer_activation)
+    n = act_shape[0]
+    c = act_shape[1]
+    h = act_shape[2]
+    w = act_shape[3]
+    
+    samples = [i for i in range(n)]
+    channels = [c for c in range(c)]
+    
+    canvas = np.zeros([len(samples), len(channels), input_shape[0], input_shape[1]], 
+                      dtype=np.float32)
+    
+    for n in samples:
+        for c in channels:
+            to_project = layer_activation[n,c,:,:]
+            canvas[n,c,:,:] = cv2.resize(to_project, (input_shape[1], input_shape[0]))
+
     return canvas
