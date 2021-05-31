@@ -50,13 +50,13 @@ def get_all_pairs(classes):
 
     return pairs
 
-def get_image_pairs(experiment_name, class_0, class_1):
+def get_image_pairs(base_dir, class_0, class_1):
     """
     Experiment datasets are expected to be placed at 
-    experiments/<experiment_name>/data/<class_0>_<class_1>
+    <base_dir>/<class_0>_<class_1>
     These should be valid translations as produced by scam.create_dataset
     """
-    image_dir = f"experiments/{experiment_name}/data/{class_0}_{class_1}"
+    image_dir = f"{base_dir}/{class_0}_{class_1}"
     images = os.listdir(image_dir)
     real = [os.path.join(image_dir,im) for im in images if "real" in im and im.endswith(".png")]
     fake = [os.path.join(image_dir,im) for im in images if "fake" in im and im.endswith(".png")]
