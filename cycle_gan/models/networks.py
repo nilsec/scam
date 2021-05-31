@@ -4,7 +4,8 @@ from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
 import torch.nn.functional as F
-from .aux_nets import Vgg2D
+from networks.Vgg2D import Vgg2D
+from networks.ResNet import ResNet
 
 ###############################################################################
 # Helper Functions
@@ -373,7 +374,8 @@ class ResnetGenerator(nn.Module):
         """Standard forward"""
         return self.model(input)
 
-def define_AUX(checkpoint_path, input_size=128, aux_net="vgg2d", input_nc=1, gpu_ids=[]):
+def define_AUX(checkpoint_path, input_size=128, aux_net="vgg2d", output_classes=6, 
+               downsample_factors=[(2,2), (2,2), (2,2), (2,2)], input_nc=1, gpu_ids=[]):
     """
     checkpoint_path: Path to train checkpoint to restore weights from
 
@@ -383,7 +385,11 @@ def define_AUX(checkpoint_path, input_size=128, aux_net="vgg2d", input_nc=1, gpu
     """
     if aux_net == "vgg2d":
         net = Vgg2D(input_size=(input_size, input_size),
-                    input_channels=input_nc)
+                    input_channels=input_nc,
+                    downsample_factors=downsample_factors,
+                    output_classes=output_classes)
+    elif aux_net == "res":
+        net = ResNet(output_classes, (input_size, input_size), input_nc)
     else:
         raise NotImplementedError
 
@@ -396,7 +402,7 @@ def define_AUX(checkpoint_path, input_size=128, aux_net="vgg2d", input_nc=1, gpu
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     net.to(device)
     checkpoint = torch.load(checkpoint_path)
-    net.load_state_dict(checkpoint['model_state_dict'])
+    net.load_state_dict(checkpoint)
     return net
 
 class ResnetBlock(nn.Module):
